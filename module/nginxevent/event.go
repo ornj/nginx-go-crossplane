@@ -9,7 +9,7 @@ const (
 	_
 )
 
-var events = crossplane.Command{
+var Events = crossplane.Command{
 	Name:  "events",
 	Flags: crossplane.ConfMainConf | crossplane.ConfBlock | crossplane.ConfNoArgs,
 	Run: func(_ *crossplane.Directive, p *crossplane.Pass, next func(*crossplane.Pass) error) error {
@@ -19,7 +19,7 @@ var events = crossplane.Command{
 	},
 }
 
-var workerConnections = crossplane.Command{
+var WorkerConnections = crossplane.Command{
 	Name:  "worker_connections",
 	Flags: EventConf | crossplane.ConfTake1,
 }
@@ -27,9 +27,9 @@ var workerConnections = crossplane.Command{
 var Module = crossplane.ModuleFunc(func(name string) (crossplane.Command, bool) {
 	switch name {
 	case "events":
-		return events, true
+		return Events, true
 	case "worker_connections":
-		return workerConnections, true
+		return WorkerConnections, true
 	}
 
 	return crossplane.Command{}, false

@@ -50,6 +50,10 @@ var include = Command{
 	Name:  "include",
 	Flags: ConfAnyConf | ConfTake1,
 	Run: func(d *Directive, p *Pass, next func(*Pass) error) (err error) {
+		if !p.parser.ParseIncludes {
+			return next(p)
+		}
+
 		pat := d.Args[0]
 		if !filepath.IsAbs(pat) {
 			pat = filepath.Join(p.ConfigDir, pat)

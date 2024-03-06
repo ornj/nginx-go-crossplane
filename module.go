@@ -84,11 +84,30 @@ func (c Command) ValidateArgs(name string, d Directive) error {
 	return newParsingErrf(name, d.Line, "invalid number of arguments in %q directive", d.Directive)
 }
 
+type Ignore []Command
+
+func (i Ignore) Ignore(name string, commandType int) bool {
+	for _, id := range i {
+		if id.Name == name && id.Flags&commandType != 0 {
+			return true
+		}
+	}
+
+	return false
+}
+
 type Parser struct {
-	Modules       []Module
-	Open          func(path string) (io.ReadCloser, error)
-	Glob          func(path string) ([]string, error)
+	Modules []Module
+	Open    func(path string) (io.ReadCloser, error)
+	Glob    func(path string) ([]string, error)
+	// IgnoreCommands is a list of commands to skip parsing and omit from the result. If a skipped command is a block
+	// directive then the contents of the directive are skipped.
+	IgnoreCommands Ignore
+	// ParseComments enables the parsing of comments. If true comments will be included in the result as # directives.
 	ParseComments bool
+	// ParseIncludes enables the parsing of configuration files included with the "include" directive. Glob will be
+	// used to resolve any glob patterns and Open is used to open the included files.
+	ParseIncludes bool
 }
 
 type Pass struct {
@@ -267,6 +286,27 @@ func (p *Parser) parse(pass *Pass) error {
 				continue
 			}
 
+			// TODO: This seems to continue parsing and ending up in the wrong context.
+			if p.IgnoreCommands != nil && p.IgnoreCommands.Ignore(c.Name, pass.CommandType) {
+				// TODO: What if it is a block but has no run? Should that be allowed or not legal?
+				if c.Run == nil {
+					goto outer
+					// return nil
+				}
+
+				// TODO: does this mutate pass?
+				nextPass := pass.next()
+				_ = c.Run(&d, &nextPass, func(pass *Pass) error {
+					if !c.IsBlock() {
+						return nil
+					}
+
+					return p.parse(&nextPass)
+				})
+
+				goto outer
+			}
+
 			// Check if it's not a block and terminated by ;
 			if !c.IsBlock() && tok.Text != ";" {
 				return newParsingErrf(pass.Filename, d.Line, `directive %q is not terminated by ";"`, d.Directive)
@@ -281,6 +321,7 @@ func (p *Parser) parse(pass *Pass) error {
 				return err
 			}
 
+			// TODO: What if it is a block but has no run? Should that be allowed or not legal?
 			if c.Run == nil {
 				pass.Directives = append(pass.Directives, &d)
 				goto outer
@@ -291,7 +332,7 @@ func (p *Parser) parse(pass *Pass) error {
 				if !c.IsBlock() {
 					return nil
 				}
-				return p.parse(&nextPass)
+				return p.parse(pass)
 			})
 
 			if err != nil {

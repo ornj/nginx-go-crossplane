@@ -25,14 +25,18 @@ type expectError struct {
 }
 
 type testParserCase struct {
-	Want    crossplane.Package
-	WantErr *expectError
+	IgnoreCommands []crossplane.Command
+	ParseComments  bool
+	ParseIncludes  bool
+	Want           crossplane.Package
+	WantErr        *expectError
 }
 
 func TestParserWithComments(t *testing.T) {
 	t.Parallel()
 
 	testParser(t, "with-comments", testParserCase{
+		ParseComments: true,
 		Want: crossplane.Package{
 			Name: getTestConfigPath("with-comments", "nginx.conf"),
 			Files: map[string]crossplane.File{
@@ -115,6 +119,8 @@ func TestParserIncludesGlobbed(t *testing.T) {
 	t.Parallel()
 
 	testParser(t, "includes-globbed", testParserCase{
+		ParseComments: true,
+		ParseIncludes: true,
 		Want: crossplane.Package{
 			Name: getTestConfigPath("includes-globbed", "nginx.conf"),
 			Files: map[string]crossplane.File{
@@ -237,6 +243,8 @@ func TestIncludesRegularFailed(t *testing.T) {
 	t.Parallel()
 
 	testParser(t, "includes-regular", testParserCase{
+		ParseComments: true,
+		ParseIncludes: true,
 		WantErr: &expectError{
 			Filename: getTestConfigPath("includes-regular", "conf.d", "server.conf"),
 			Line:     5,
@@ -319,6 +327,87 @@ func TestIncludesRegularFailed(t *testing.T) {
 	})
 }
 
+func TestSimpleIgnoreDirectives01(t *testing.T) {
+	t.Parallel()
+
+	testParser(t, "simple", testParserCase{
+		IgnoreCommands: []crossplane.Command{
+			nginxhttp.Listen,
+			nginxhttp.ServerName,
+		},
+		Want: crossplane.Package{
+			Name: getTestConfigPath("simple", "nginx.conf"),
+			Files: map[string]crossplane.File{
+				getTestConfigPath("simple", "nginx.conf"): {
+					Name: getTestConfigPath("simple", "nginx.conf"),
+					Directives: []*crossplane.Directive{
+						{
+							Directive: "events",
+							Line:      1,
+							Block: []*crossplane.Directive{
+								{
+									Directive: "worker_connections",
+									Args:      []string{"1024"},
+									Line:      2,
+								},
+							},
+						},
+						{
+							Directive: "http",
+							Line:      5,
+							Block: []*crossplane.Directive{
+								{
+									Directive: "server",
+									Line:      6,
+									Block: []*crossplane.Directive{
+										{
+											Directive: "location",
+											Args:      []string{"/"},
+											Line:      9,
+											Block: []*crossplane.Directive{
+												{
+													Directive: "return",
+													Args:      []string{"200", "foo bar baz"},
+													Line:      10,
+												},
+											},
+										},
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+		},
+	})
+}
+
+func TestSimpleIgnoreDirectives02(t *testing.T) {
+	t.Parallel()
+
+	testParser(t, "simple", testParserCase{
+		IgnoreCommands: []crossplane.Command{
+			nginxevent.Events,
+			nginxhttp.Server,
+		},
+		Want: crossplane.Package{
+			Name: getTestConfigPath("simple", "nginx.conf"),
+			Files: map[string]crossplane.File{
+				getTestConfigPath("simple", "nginx.conf"): {
+					Name: getTestConfigPath("simple", "nginx.conf"),
+					Directives: []*crossplane.Directive{
+						{
+							Directive: "http",
+							Line:      5,
+						},
+					},
+				},
+			},
+		},
+	})
+}
+
 func testParser(t *testing.T, name string, tc testParserCase) {
 	f, err := os.Open(getTestConfigPath(name, "nginx.conf"))
 	if err != nil {
@@ -334,7 +423,9 @@ func testParser(t *testing.T, name string, tc testParserCase) {
 			nginxhttp.Module,
 			nginxhttprewrite.Module,
 		},
-		ParseComments: true,
+		IgnoreCommands: tc.IgnoreCommands,
+		ParseComments:  tc.ParseComments,
+		ParseIncludes:  tc.ParseIncludes,
 	}
 
 	pkg, err := p.Parse(f.Name(), crossplane.NewScanner(f))
