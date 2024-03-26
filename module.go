@@ -116,7 +116,7 @@ type Pass struct {
 	Filename    string
 	ConfigDir   string
 	parser      *Parser
-	scanner     *Scanner
+	Scanner     *Scanner
 	includes    []Include
 	included    map[string]int // keys files from being parsed twice
 }
@@ -130,7 +130,7 @@ func (p Pass) next() Pass {
 		included:    p.included,
 		includes:    p.includes,
 		parser:      p.parser,
-		scanner:     p.scanner,
+		Scanner:     p.Scanner,
 	}
 }
 
@@ -160,7 +160,7 @@ func (p *Parser) Parse(basename string, s *Scanner) (Package, error) {
 	pass := &Pass{
 		ConfigDir: filepath.Dir(basename),
 		parser:    p,
-		scanner:   s,
+		Scanner:   s,
 		included:  map[string]int{basename: 0},
 		includes: []Include{
 			{
@@ -187,14 +187,14 @@ func (p *Parser) Parse(basename string, s *Scanner) (Package, error) {
 
 		// POC: wrapped in a function to defer closing opened files
 		err := func() error {
-			if pass.scanner == nil {
+			if pass.Scanner == nil {
 				rc, err := p.open(name)
 				if err != nil {
 					return newParsingErrf(pass.includes[i].Filename, pass.includes[i].Line, "%w", err)
 				}
 
 				defer rc.Close()
-				pass.scanner = NewScanner(rc)
+				pass.Scanner = NewScanner(rc)
 			}
 
 			for {
@@ -202,7 +202,7 @@ func (p *Parser) Parse(basename string, s *Scanner) (Package, error) {
 				if err == io.EOF {
 					pass.includes[i].File.Directives = pass.Directives
 					pass.Directives = nil
-					pass.scanner = nil
+					pass.Scanner = nil
 					pkg.Files[name] = pass.includes[i].File
 					break
 				}
@@ -225,9 +225,10 @@ func (p *Parser) Parse(basename string, s *Scanner) (Package, error) {
 
 func (p *Parser) parse(pass *Pass) error {
 	for {
-		// TODO: I hate labels
+		// TODO: I'm not a fan of labels and would rather refactor this out, but it works. This method is too long and
+		// should probably be split up.
 	outer:
-		tok, err := pass.scanner.Scan()
+		tok, err := pass.Scanner.Scan()
 		if err != nil {
 			return err
 		}
@@ -253,7 +254,7 @@ func (p *Parser) parse(pass *Pass) error {
 			continue
 		}
 
-		if tok, err = pass.scanner.Scan(); err != nil {
+		if tok, err = pass.Scanner.Scan(); err != nil {
 			return err
 		}
 
@@ -267,7 +268,7 @@ func (p *Parser) parse(pass *Pass) error {
 				commentsInArgs = append(commentsInArgs, tok.Text[1:])
 			}
 
-			if tok, err = pass.scanner.Scan(); err != nil {
+			if tok, err = pass.Scanner.Scan(); err != nil {
 				return err
 			}
 		}
@@ -291,10 +292,8 @@ func (p *Parser) parse(pass *Pass) error {
 				// TODO: What if it is a block but has no run? Should that be allowed or not legal?
 				if c.Run == nil {
 					goto outer
-					// return nil
 				}
 
-				// TODO: does this mutate pass?
 				nextPass := pass.next()
 				_ = c.Run(&d, &nextPass, func(pass *Pass) error {
 					if !c.IsBlock() {
@@ -357,7 +356,7 @@ func (p *Parser) parse(pass *Pass) error {
 			pass.included = nextPass.included
 			pass.includes = nextPass.includes
 
-			return nil
+			goto outer
 		}
 
 		if found {
