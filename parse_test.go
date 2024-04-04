@@ -1363,6 +1363,26 @@ func TestParse(t *testing.T) {
 	}
 }
 
+func BenchmarkParse(b *testing.B) {
+	for _, fixture := range parseFixtures {
+		fullName := fixture.name + fixture.suffix
+
+		if fullName != "with-comments-true" && fullName != "includes-globbed" && fullName != "includes-regular" {
+			continue
+		}
+
+		b.Run(fixture.name, func(b *testing.B) {
+			path := getTestConfigPath(fixture.name, "nginx.conf")
+			for i := 0; i < b.N; i++ {
+				_, err := Parse(path, &fixture.options)
+				if err != nil {
+					b.Fatal(err)
+				}
+			}
+		})
+	}
+}
+
 //nolint:errchkjson
 func TestParseVarArgs(t *testing.T) {
 	t.Parallel()
