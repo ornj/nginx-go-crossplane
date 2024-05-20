@@ -26,9 +26,9 @@ var WorkerConnections = crossplane.Command{
 
 var Module = crossplane.ModuleFunc(func(name string) (crossplane.Command, bool) {
 	switch name {
-	case "events":
+	case Events.Name:
 		return Events, true
-	case "worker_connections":
+	case WorkerConnections.Name:
 		return WorkerConnections, true
 	}
 

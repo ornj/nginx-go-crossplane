@@ -17,9 +17,9 @@ var Set = crossplane.Command{
 
 var Module = crossplane.ModuleFunc(func(name string) (crossplane.Command, bool) {
 	switch name {
-	case "return":
+	case Return.Name:
 		return Return, true
-	case "set":
+	case Set.Name:
 		return Set, true
 	}
 
