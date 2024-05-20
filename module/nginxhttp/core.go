@@ -28,6 +28,11 @@ var Location = crossplane.Command{
 	},
 }
 
+var ProxyPass = crossplane.Command{
+	Name:  "proxy_pass",
+	Flags: HTTPLocConf | HTTPLifConf | HTTPLmtConf | crossplane.ConfTake1,
+}
+
 var Server = crossplane.Command{
 	Name:  "server",
 	Flags: HTTPMainConf | crossplane.ConfBlock | crossplane.ConfNoArgs,
@@ -44,15 +49,17 @@ var ServerName = crossplane.Command{
 
 var Module = crossplane.ModuleFunc(func(name string) (crossplane.Command, bool) {
 	switch name {
-	case "http":
+	case HTTP.Name:
 		return HTTP, true
-	case "listen":
+	case Listen.Name:
 		return Listen, true
-	case "location":
+	case Location.Name:
 		return Location, true
-	case "server":
+	case ProxyPass.Name:
+		return ProxyPass, true
+	case Server.Name:
 		return Server, true
-	case "server_name":
+	case ServerName.Name:
 		return ServerName, true
 	}
 

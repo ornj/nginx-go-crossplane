@@ -115,6 +115,14 @@ func TestParserWithComments(t *testing.T) {
 	})
 }
 
+func TestParserIncludesRegularSingleFile(t *testing.T) {
+	t.Parallel()
+
+	t.Skip("Not Implemented")
+
+	testParser(t, "includes-regular", testParserCase{})
+}
+
 func TestParserIncludesGlobbed(t *testing.T) {
 	t.Parallel()
 
@@ -237,6 +245,14 @@ func TestParserIncludesGlobbed(t *testing.T) {
 			},
 		},
 	})
+}
+
+func TestParserIncludesGlobbedCombineConfigs(t *testing.T) {
+	t.Parallel()
+
+	t.Skip("Not Implemented")
+
+	testParser(t, "includes-globbed", testParserCase{})
 }
 
 func TestIncludesRegularFailed(t *testing.T) {
@@ -400,6 +416,77 @@ func TestSimpleIgnoreDirectives02(t *testing.T) {
 						{
 							Directive: "http",
 							Line:      5,
+						},
+					},
+				},
+			},
+		},
+	})
+}
+
+func TestSimpleVariableWithBracesIgnoreDirectives01(t *testing.T) {
+	t.Parallel()
+
+	testParser(t, "simple-variable-with-braces", testParserCase{
+		IgnoreCommands: []crossplane.Command{
+			nginxhttp.Listen,
+			nginxhttp.ServerName,
+		},
+		Want: crossplane.Package{
+			Name: getTestConfigPath("simple-variable-with-braces", "nginx.conf"),
+			Files: map[string]crossplane.File{
+				getTestConfigPath("simple-variable-with-braces", "nginx.conf"): {
+					Name: getTestConfigPath("simple-variable-with-braces", "nginx.conf"),
+					Directives: []*crossplane.Directive{
+						{
+							Directive: "events",
+							Line:      1,
+							Block: []*crossplane.Directive{
+								{
+									Directive: "worker_connections",
+									Args:      []string{"1024"},
+									Line:      2,
+								},
+							},
+						},
+						{
+							Directive: "http",
+							Line:      5,
+							Block: []*crossplane.Directive{
+								{
+									Directive: "server",
+									Line:      6,
+									Block: []*crossplane.Directive{
+										{
+											Directive: "location",
+											Args:      []string{"/proxy"},
+											Line:      9,
+											Block: []*crossplane.Directive{
+												{
+													Directive: "set",
+													Args:      []string{"$backend_protocol", "http"},
+													Line:      10,
+												},
+												{
+													Directive: "set",
+													Args:      []string{"$backend_host", "bar"},
+													Line:      11,
+												},
+												{
+													Directive: "set",
+													Args:      []string{"$foo", ""},
+													Line:      12,
+												},
+												{
+													Directive: "proxy_pass",
+													Args:      []string{"$backend_protocol://$backend_host${foo}"},
+													Line:      13,
+												},
+											},
+										},
+									},
+								},
+							},
 						},
 					},
 				},
