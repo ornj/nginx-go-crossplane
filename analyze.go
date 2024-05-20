@@ -38,6 +38,7 @@ const (
 
 	// bit masks for different directive locations.
 	ngxDirectConf     = 0x00010000 // main file (not used)
+	ngxMgmtMainConf   = 0x00020000 // mgmt // unique bitmask that may not match NGINX source
 	ngxMainConf       = 0x00040000 // main context
 	ngxEventConf      = 0x00080000 // events
 	ngxMailMainConf   = 0x00100000 // mail
@@ -55,6 +56,7 @@ const (
 )
 
 // helpful directive location alias describing "any" context
+// doesn't include ngxHTTPSifConf, ngxHTTPLifConf, ngxHTTPLmtConf, or ngxMgmtMainConf.
 const ngxAnyConf = ngxMainConf | ngxEventConf | ngxMailMainConf | ngxMailSrvConf |
 	ngxStreamMainConf | ngxStreamSrvConf | ngxStreamUpsConf |
 	ngxHTTPMainConf | ngxHTTPSrvConf | ngxHTTPLocConf | ngxHTTPUpsConf |
@@ -78,6 +80,7 @@ var contexts = map[string]uint{
 	blockCtx{"http", "server", "if"}.key():             ngxHTTPSifConf,
 	blockCtx{"http", "location", "if"}.key():           ngxHTTPLifConf,
 	blockCtx{"http", "location", "limit_except"}.key(): ngxHTTPLmtConf,
+	blockCtx{"mgmt"}.key():                             ngxMgmtMainConf,
 }
 
 func enterBlockCtx(stmt *Directive, ctx blockCtx) blockCtx {
@@ -93,6 +96,14 @@ func enterBlockCtx(stmt *Directive, ctx blockCtx) blockCtx {
 func analyze(fname string, stmt *Directive, term string, ctx blockCtx, options *ParseOptions) error {
 	masks, knownDirective := directives[stmt.Directive]
 	currCtx, knownContext := contexts[ctx.key()]
+
+	if !knownDirective {
+		for _, matchFn := range options.MatchFuncs {
+			if masks, knownDirective = matchFn(stmt.Directive); knownDirective {
+				break
+			}
+		}
+	}
 
 	// if strict and directive isn't recognized then throw error
 	if options.ErrorOnUnknownDirectives && !knownDirective {
@@ -330,6 +341,9 @@ var directives = map[string][]uint{
 	},
 	"client_max_body_size": {
 		ngxHTTPMainConf | ngxHTTPSrvConf | ngxHTTPLocConf | ngxConfTake1,
+	},
+	"connect_timeout": {
+		ngxMgmtMainConf | ngxConfTake1,
 	},
 	"connection_pool_size": {
 		ngxHTTPMainConf | ngxHTTPSrvConf | ngxConfTake1,
@@ -964,6 +978,9 @@ var directives = map[string][]uint{
 	"merge_slashes": {
 		ngxHTTPMainConf | ngxHTTPSrvConf | ngxConfFlag,
 	},
+	"mgmt": {
+		ngxMainConf | ngxConfBlock | ngxConfNoArgs,
+	},
 	"min_delete_depth": {
 		ngxHTTPMainConf | ngxHTTPSrvConf | ngxHTTPLocConf | ngxConfTake1,
 	},
@@ -1364,6 +1381,9 @@ var directives = map[string][]uint{
 	"read_ahead": {
 		ngxHTTPMainConf | ngxHTTPSrvConf | ngxHTTPLocConf | ngxConfTake1,
 	},
+	"read_timeout": {
+		ngxMgmtMainConf | ngxConfTake1,
+	},
 	"real_ip_header": {
 		ngxHTTPMainConf | ngxHTTPSrvConf | ngxHTTPLocConf | ngxConfTake1,
 	},
@@ -1390,11 +1410,13 @@ var directives = map[string][]uint{
 		ngxMailMainConf | ngxMailSrvConf | ngxConf1More,
 		ngxStreamMainConf | ngxStreamUpsConf | ngxStreamSrvConf | ngxConf1More,
 		ngxHTTPUpsConf | ngxConf1More,
+		ngxMgmtMainConf | ngxConf1More,
 	},
 	"resolver_timeout": {
 		ngxHTTPMainConf | ngxHTTPSrvConf | ngxHTTPLocConf | ngxHTTPUpsConf | ngxConfTake1,
 		ngxMailMainConf | ngxMailSrvConf | ngxConfTake1,
 		ngxStreamMainConf | ngxStreamUpsConf | ngxStreamSrvConf | ngxConfTake1,
+		ngxMgmtMainConf | ngxConfTake1,
 	},
 	"return": {
 		ngxHTTPSrvConf | ngxHTTPSifConf | ngxHTTPLocConf | ngxHTTPLifConf | ngxConfTake12,
@@ -1558,6 +1580,7 @@ var directives = map[string][]uint{
 	},
 	"send_timeout": {
 		ngxHTTPMainConf | ngxHTTPSrvConf | ngxHTTPLocConf | ngxConfTake1,
+		ngxMgmtMainConf | ngxConfTake1,
 	},
 	"sendfile": {
 		ngxHTTPMainConf | ngxHTTPSrvConf | ngxHTTPLocConf | ngxHTTPLifConf | ngxConfFlag,
@@ -1646,6 +1669,7 @@ var directives = map[string][]uint{
 	"ssl": {
 		ngxHTTPMainConf | ngxHTTPSrvConf | ngxConfFlag,
 		ngxMailMainConf | ngxMailSrvConf | ngxConfFlag,
+		ngxMgmtMainConf | ngxConfFlag,
 	},
 	"ssl_alpn": {
 		ngxStreamMainConf | ngxStreamSrvConf | ngxConf1More,
@@ -1657,16 +1681,19 @@ var directives = map[string][]uint{
 		ngxHTTPMainConf | ngxHTTPSrvConf | ngxConfTake1,
 		ngxMailMainConf | ngxMailSrvConf | ngxConfTake1,
 		ngxStreamMainConf | ngxStreamSrvConf | ngxConfTake1,
+		ngxMgmtMainConf | ngxConfTake1,
 	},
 	"ssl_certificate_key": {
 		ngxHTTPMainConf | ngxHTTPSrvConf | ngxConfTake1,
 		ngxMailMainConf | ngxMailSrvConf | ngxConfTake1,
 		ngxStreamMainConf | ngxStreamSrvConf | ngxConfTake1,
+		ngxMgmtMainConf | ngxConfTake1,
 	},
 	"ssl_ciphers": {
 		ngxHTTPMainConf | ngxHTTPSrvConf | ngxConfTake1,
 		ngxMailMainConf | ngxMailSrvConf | ngxConfTake1,
 		ngxStreamMainConf | ngxStreamSrvConf | ngxConfTake1,
+		ngxMgmtMainConf | ngxConfTake1,
 	},
 	"ssl_client_certificate": {
 		ngxHTTPMainConf | ngxHTTPSrvConf | ngxConfTake1,
@@ -1682,6 +1709,7 @@ var directives = map[string][]uint{
 		ngxHTTPMainConf | ngxHTTPSrvConf | ngxConfTake1,
 		ngxMailMainConf | ngxMailSrvConf | ngxConfTake1,
 		ngxStreamMainConf | ngxStreamSrvConf | ngxConfTake1,
+		ngxMgmtMainConf | ngxConfTake1,
 	},
 	"ssl_dhparam": {
 		ngxHTTPMainConf | ngxHTTPSrvConf | ngxConfTake1,
@@ -1702,6 +1730,9 @@ var directives = map[string][]uint{
 	"ssl_handshake_timeout": {
 		ngxStreamMainConf | ngxStreamSrvConf | ngxConfTake1,
 	},
+	"ssl_name": {
+		ngxMgmtMainConf | ngxConfTake1,
+	},
 	"ssl_ocsp": {
 		ngxHTTPMainConf | ngxHTTPSrvConf | ngxConfTake1,
 	},
@@ -1715,6 +1746,7 @@ var directives = map[string][]uint{
 		ngxHTTPMainConf | ngxHTTPSrvConf | ngxConfTake1,
 		ngxMailMainConf | ngxMailSrvConf | ngxConfTake1,
 		ngxStreamMainConf | ngxStreamSrvConf | ngxConfTake1,
+		ngxMgmtMainConf | ngxConfTake1,
 	},
 	"ssl_prefer_server_ciphers": {
 		ngxHTTPMainConf | ngxHTTPSrvConf | ngxConfFlag,
@@ -1728,9 +1760,13 @@ var directives = map[string][]uint{
 		ngxHTTPMainConf | ngxHTTPSrvConf | ngxConf1More,
 		ngxMailMainConf | ngxMailSrvConf | ngxConf1More,
 		ngxStreamMainConf | ngxStreamSrvConf | ngxConf1More,
+		ngxMgmtMainConf | ngxConf1More,
 	},
 	"ssl_reject_handshake": {
 		ngxHTTPMainConf | ngxHTTPSrvConf | ngxConfFlag,
+	},
+	"ssl_server_name": {
+		ngxMgmtMainConf | ngxConfFlag,
 	},
 	"ssl_session_cache": {
 		ngxHTTPMainConf | ngxHTTPSrvConf | ngxConfTake12,
@@ -1768,6 +1804,10 @@ var directives = map[string][]uint{
 		ngxHTTPMainConf | ngxHTTPSrvConf | ngxConfTake1,
 		ngxMailMainConf | ngxMailSrvConf | ngxConfTake1,
 		ngxStreamMainConf | ngxStreamSrvConf | ngxConfTake1,
+		ngxMgmtMainConf | ngxConfTake1,
+	},
+	"ssl_verify": {
+		ngxMgmtMainConf | ngxConfFlag,
 	},
 	"ssl_verify_client": {
 		ngxHTTPMainConf | ngxHTTPSrvConf | ngxConfTake1,
@@ -1778,6 +1818,7 @@ var directives = map[string][]uint{
 		ngxHTTPMainConf | ngxHTTPSrvConf | ngxConfTake1,
 		ngxMailMainConf | ngxMailSrvConf | ngxConfTake1,
 		ngxStreamMainConf | ngxStreamSrvConf | ngxConfTake1,
+		ngxMgmtMainConf | ngxConfTake1,
 	},
 	"starttls": {
 		ngxMailMainConf | ngxMailSrvConf | ngxConfTake1,
@@ -1844,6 +1885,9 @@ var directives = map[string][]uint{
 	"upstream_conf": {
 		ngxHTTPLocConf | ngxConfNoArgs,
 	},
+	"usage_report": {
+		ngxMgmtMainConf | ngxConfNoArgs | ngxConfTake1 | ngxConfTake2,
+	},
 	"use": {
 		ngxEventConf | ngxConfTake1,
 	},
@@ -1876,6 +1920,9 @@ var directives = map[string][]uint{
 	},
 	"userid_service": {
 		ngxHTTPMainConf | ngxHTTPSrvConf | ngxHTTPLocConf | ngxConfTake1,
+	},
+	"uuid_file": {
+		ngxMgmtMainConf | ngxConfTake1,
 	},
 	"uwsgi_bind": {
 		ngxHTTPMainConf | ngxHTTPSrvConf | ngxHTTPLocConf | ngxConfTake12,
@@ -2254,6 +2301,10 @@ var directives = map[string][]uint{
 		ngxHTTPMainConf | ngxHTTPSrvConf | ngxHTTPLocConf | ngxConfTake2,
 		ngxStreamMainConf | ngxStreamSrvConf | ngxConfTake2,
 	},
+	"js_shared_dict_zone": {
+		ngxHTTPMainConf | ngxConf1More,
+		ngxStreamMainConf | ngxConf1More,
+	},
 	"js_var": {
 		ngxHTTPMainConf | ngxHTTPSrvConf | ngxHTTPLocConf | ngxConfTake12,
 		ngxStreamMainConf | ngxStreamSrvConf | ngxConfTake12,
@@ -2401,9 +2452,13 @@ var directives = map[string][]uint{
 	"zone_sync_timeout": {
 		ngxStreamMainConf | ngxStreamSrvConf | ngxConfTake1,
 	},
+}
 
-	// nginx app protect specific and global directives
-	// [https://docs.nginx.com/nginx-app-protect/configuration-guide/configuration/#directives]
+// nginx app protect specific and global directives
+// [https://docs.nginx.com/nginx-app-protect/configuration-guide/configuration/#directives]
+//
+//nolint:gochecknoglobals
+var appProtectWAFv4Directives = map[string][]uint{
 	"app_protect_compressed_requests_action": {
 		ngxHTTPMainConf | ngxConfTake1,
 	},
@@ -2440,4 +2495,233 @@ var directives = map[string][]uint{
 	"app_protect_user_defined_signatures": {
 		ngxHTTPMainConf | ngxConfTake1,
 	},
+}
+
+// MatchAppProtectWAFv4 is a match function for parsing an NGINX config that contains the
+// App Protect v4 module.
+func MatchAppProtectWAFv4(directive string) ([]uint, bool) {
+	masks, matched := appProtectWAFv4Directives[directive]
+	return masks, matched
+}
+
+//nolint:gochecknoglobals
+var appProtectWAFv5Directives = map[string][]uint{
+	// https://docs.nginx.com/nginx-app-protect-waf/v5/configuration-guide/configuration/#global-directives
+	"app_protect_physical_memory_util_thresholds": {
+		ngxHTTPMainConf | ngxConfTake2,
+	},
+	"app_protect_cpu_thresholds": {
+		ngxHTTPMainConf | ngxConfTake2,
+	},
+	"app_protect_failure_mode_action": {
+		ngxHTTPMainConf | ngxConfTake1,
+	},
+	"app_protect_cookie_seed": {
+		ngxHTTPMainConf | ngxConfTake1,
+	},
+	"app_protect_request_buffer_overflow_action": {
+		ngxHTTPMainConf | ngxConfTake1,
+	},
+	"app_protect_reconnect_period_seconds": {
+		ngxHTTPMainConf | ngxConfTake1,
+	},
+	// https://docs.nginx.com/nginx-app-protect-waf/v5/configuration-guide/configuration/#app-protect-specific-directives
+	"app_protect_enforcer_address": {
+		ngxHTTPMainConf | ngxConfTake1,
+	},
+	"app_protect_enable": {
+		ngxHTTPMainConf | ngxHTTPSrvConf | ngxHTTPLocConf | ngxConfFlag,
+	},
+	"app_protect_policy_file": {
+		ngxHTTPMainConf | ngxHTTPSrvConf | ngxHTTPLocConf | ngxConfTake1,
+	},
+	"app_protect_security_log_enable": {
+		ngxHTTPMainConf | ngxHTTPSrvConf | ngxHTTPLocConf | ngxConfFlag,
+	},
+	"app_protect_security_log": {
+		ngxHTTPMainConf | ngxHTTPSrvConf | ngxHTTPLocConf | ngxConfTake2,
+	},
+	"app_protect_custom_log_attribute": {
+		ngxHTTPMainConf | ngxHTTPSrvConf | ngxHTTPLocConf | ngxConfTake2,
+	},
+}
+
+// MatchAppProtectWAFv5 is a match function for parsing an NGINX config that contains the
+// App Protect v5 module.
+func MatchAppProtectWAFv5(directive string) ([]uint, bool) {
+	masks, matched := appProtectWAFv5Directives[directive]
+	return masks, matched
+}
+
+// LuaDirectives is a list of directives that are used in the Lua module
+// https://github.com/openresty/lua-nginx-module/tree/master?tab=readme-ov-file#directives
+//
+//nolint:gochecknoglobals
+var LuaDirectives = map[string][]uint{
+	"lua_load_resty_core": {
+		ngxHTTPMainConf | ngxConfFlag,
+	},
+	"lua_capture_error_log": {
+		ngxHTTPMainConf | ngxConfTake1,
+	},
+	"lua_use_default_type": {
+		ngxHTTPMainConf | ngxHTTPSrvConf | ngxHTTPLocConf | ngxHTTPLifConf | ngxConfFlag,
+	},
+	"lua_malloc_trim": {
+		ngxHTTPMainConf | ngxConfTake1,
+	},
+	"lua_code_cache": {
+		ngxHTTPMainConf | ngxHTTPSrvConf | ngxHTTPLocConf | ngxHTTPLifConf | ngxConfFlag,
+	},
+	"lua_thread_cache_max_entries": {
+		ngxHTTPMainConf | ngxConfTake1,
+	},
+	"lua_regex_cache_max_entries": {
+		ngxHTTPMainConf | ngxConfTake1,
+	},
+	"lua_regex_match_limit": {
+		ngxHTTPMainConf | ngxConfTake1,
+	},
+	"lua_package_path": {
+		ngxHTTPMainConf | ngxConfTake1,
+	},
+	"lua_package_cpath": {
+		ngxHTTPMainConf | ngxConfTake1,
+	},
+	"init_by_lua_file": {
+		ngxHTTPMainConf | ngxConfTake1,
+	},
+	"init_worker_by_lua_file": {
+		ngxHTTPMainConf | ngxConfTake1,
+	},
+	"exit_worker_by_lua_file": {
+		ngxHTTPMainConf | ngxConfTake1,
+	},
+	"set_by_lua_file": {
+		ngxHTTPSrvConf | ngxHTTPSifConf | ngxHTTPLocConf | ngxHTTPLifConf | ngxConf2More,
+	},
+	"content_by_lua_file": {
+		ngxHTTPLocConf | ngxHTTPLifConf | ngxConfTake1,
+	},
+	"server_rewrite_by_lua_file": {
+		ngxHTTPMainConf | ngxHTTPSrvConf | ngxConfTake1,
+	},
+	"rewrite_by_lua_file": {
+		ngxHTTPMainConf | ngxHTTPSrvConf | ngxHTTPLocConf | ngxHTTPLifConf | ngxConfTake1,
+	},
+	"access_by_lua_file": {
+		ngxHTTPMainConf | ngxHTTPSrvConf | ngxHTTPLocConf | ngxHTTPLifConf | ngxConfTake1,
+	},
+	"header_filter_by_lua_file": {
+		ngxHTTPMainConf | ngxHTTPSrvConf | ngxHTTPLocConf | ngxHTTPLifConf | ngxConfTake1,
+	},
+	"body_filter_by_lua_file": {
+		ngxHTTPMainConf | ngxHTTPSrvConf | ngxHTTPLocConf | ngxHTTPLifConf | ngxConfTake1,
+	},
+	"log_by_lua_file": {
+		ngxHTTPMainConf | ngxHTTPSrvConf | ngxHTTPLocConf | ngxHTTPLifConf | ngxConfTake1,
+	},
+	"balancer_by_lua_file": {
+		ngxHTTPUpsConf | ngxConfTake1,
+	},
+	"lua_need_request_body": {
+		ngxHTTPMainConf | ngxHTTPSrvConf | ngxHTTPLocConf | ngxHTTPLifConf | ngxConfFlag,
+	},
+	"ssl_client_hello_by_lua_file": {
+		ngxHTTPMainConf | ngxHTTPSrvConf | ngxConfTake1,
+	},
+	"ssl_certificate_by_lua_file": {
+		ngxHTTPMainConf | ngxHTTPSrvConf | ngxConfTake1,
+	},
+	"ssl_session_fetch_by_lua_file": {
+		ngxHTTPMainConf | ngxConfTake1,
+	},
+	"ssl_session_store_by_lua_file": {
+		ngxHTTPMainConf | ngxConfTake1,
+	},
+	"lua_shared_dict": {
+		ngxHTTPMainConf | ngxConfTake2,
+	},
+	"lua_socket_connect_timeout": {
+		ngxHTTPMainConf | ngxHTTPSrvConf | ngxHTTPLocConf | ngxHTTPLifConf | ngxConfTake1,
+	},
+	"lua_socket_send_timeout": {
+		ngxHTTPMainConf | ngxHTTPSrvConf | ngxHTTPLocConf | ngxHTTPLifConf | ngxConfTake1,
+	},
+	"lua_socket_send_lowat": {
+		ngxHTTPMainConf | ngxHTTPSrvConf | ngxHTTPLocConf | ngxHTTPLifConf | ngxConfTake1,
+	},
+	"lua_socket_read_timeout": {
+		ngxHTTPMainConf | ngxHTTPSrvConf | ngxHTTPLocConf | ngxHTTPLifConf | ngxConfTake1,
+	},
+	"lua_socket_buffer_size": {
+		ngxHTTPMainConf | ngxHTTPSrvConf | ngxHTTPLocConf | ngxHTTPLifConf | ngxConfTake1,
+	},
+	"lua_socket_pool_size": {
+		ngxHTTPMainConf | ngxHTTPSrvConf | ngxHTTPLocConf | ngxHTTPLifConf | ngxConfTake1,
+	},
+	"lua_socket_keepalive_timeout": {
+		ngxHTTPMainConf | ngxHTTPSrvConf | ngxHTTPLocConf | ngxHTTPLifConf | ngxConfTake1,
+	},
+	"lua_socket_log_errors": {
+		ngxHTTPMainConf | ngxHTTPSrvConf | ngxHTTPLocConf | ngxHTTPLifConf | ngxConfFlag,
+	},
+	"lua_ssl_ciphers": {
+		ngxHTTPMainConf | ngxHTTPSrvConf | ngxHTTPLocConf | ngxConfTake1,
+	},
+	"lua_ssl_crl": {
+		ngxHTTPMainConf | ngxHTTPSrvConf | ngxHTTPLocConf | ngxConfTake1,
+	},
+	"lua_ssl_protocols": {
+		ngxHTTPMainConf | ngxHTTPSrvConf | ngxHTTPLocConf | ngxConf1More,
+	},
+	"lua_ssl_certificate": {
+		ngxHTTPMainConf | ngxHTTPSrvConf | ngxHTTPLocConf | ngxConfTake1,
+	},
+	"lua_ssl_certificate_key": {
+		ngxHTTPMainConf | ngxHTTPSrvConf | ngxHTTPLocConf | ngxConfTake1,
+	},
+	"lua_ssl_trusted_certificate": {
+		ngxHTTPMainConf | ngxHTTPSrvConf | ngxHTTPLocConf | ngxConfTake1,
+	},
+	"lua_ssl_verify_depth": {
+		ngxHTTPMainConf | ngxHTTPSrvConf | ngxHTTPLocConf | ngxConfTake1,
+	},
+	"lua_ssl_conf_command": {
+		ngxHTTPMainConf | ngxHTTPSrvConf | ngxHTTPLocConf | ngxConfTake2,
+	},
+	"lua_http10_buffering": {
+		ngxHTTPMainConf | ngxHTTPSrvConf | ngxHTTPLocConf | ngxHTTPLifConf | ngxConfFlag,
+	},
+	"rewrite_by_lua_no_postpone": {
+		ngxHTTPMainConf | ngxConfFlag,
+	},
+	"access_by_lua_no_postpone": {
+		ngxHTTPMainConf | ngxConfFlag,
+	},
+	"lua_transform_underscores_in_response_headers": {
+		ngxHTTPMainConf | ngxHTTPSrvConf | ngxHTTPLocConf | ngxHTTPLifConf | ngxConfFlag,
+	},
+	"lua_check_client_abort": {
+		ngxHTTPMainConf | ngxHTTPSrvConf | ngxHTTPLocConf | ngxHTTPLifConf | ngxConfFlag,
+	},
+	"lua_max_pending_timers": {
+		ngxHTTPMainConf | ngxConfTake1,
+	},
+	"lua_max_running_timers": {
+		ngxHTTPMainConf | ngxConfTake1,
+	},
+	"lua_sa_restart": {
+		ngxHTTPMainConf | ngxConfFlag,
+	},
+	"lua_worker_thread_vm_pool_size": {
+		ngxHTTPMainConf | ngxConfTake1,
+	},
+}
+
+// MatchLua is a match function for parsing an NGINX config that contains the
+// Lua module.
+func MatchLua(directive string) ([]uint, bool) {
+	masks, matched := LuaDirectives[directive]
+	return masks, matched
 }
